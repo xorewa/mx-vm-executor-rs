@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - master
+      - NewArc
+  workflow_dispatch:
   pull_request:
 
 env:
@@ -23,7 +25,7 @@ jobs:
             artifact_name: libvmexeccapi.dylib
             make_target: capi-osx-amd64
           - os: macos-latest
-            artifact_name: libvmexeccapi_arm
+            artifact_name: libvmexeccapi_arm.dylib
             make_target: capi-osx-arm
     steps:
       - name: Install rust
@@ -42,6 +44,6 @@ jobs:
         with:
           name: lib-${{ matrix.make_target }}
           path: |
-            target/release/*.so
-            target/release/*.dylib
+            target/release/${{ matrix.artifact_name }}
             c-api/libvmexeccapi.h
+          if-no-files-found: error

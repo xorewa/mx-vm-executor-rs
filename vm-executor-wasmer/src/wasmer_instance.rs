@@ -14,7 +14,6 @@ use crate::{
 };
 use log::trace;
 
-use std::cell::RefCell;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 use wasmer::{CompilerConfig, Extern, Module, Store};
@@ -31,7 +30,7 @@ pub struct WasmerInstance {
     pub(crate) wasmer_instance: wasmer::Instance,
     memory_name: String,
     compilation_options_fingerprint: u64,
-    early_exit_cell: RefCell<Option<VMHooksEarlyExit>>,
+    early_exit_cell: Mutex<Option<VMHooksEarlyExit>>,
 }
 
 impl WasmerInstance {
@@ -78,7 +77,7 @@ impl WasmerInstance {
             wasmer_instance,
             memory_name,
             compilation_options_fingerprint: compilation_options_fingerprint(compilation_options),
-            early_exit_cell: RefCell::new(None),
+            early_exit_cell: Mutex::new(None),
         })
     }
 
@@ -129,7 +128,7 @@ impl WasmerInstance {
             wasmer_instance,
             memory_name,
             compilation_options_fingerprint: compilation_options_fingerprint(compilation_options),
-            early_exit_cell: RefCell::new(None),
+            early_exit_cell: Mutex::new(None),
         })
     }
 
@@ -142,11 +141,17 @@ impl WasmerInstance {
     }
 
     pub fn set_early_exit(&self, early_exit: VMHooksEarlyExit) {
-        *self.early_exit_cell.borrow_mut() = Some(early_exit);
+        *self
+            .early_exit_cell
+            .lock()
+            .expect("WasmerInstance early-exit mutex poisoned") = Some(early_exit);
     }
 
     pub fn take_early_exit(&self) -> Option<VMHooksEarlyExit> {
-        self.early_exit_cell.take()
+        self.early_exit_cell
+            .lock()
+            .expect("WasmerInstance early-exit mutex poisoned")
+            .take()
     }
 }
 

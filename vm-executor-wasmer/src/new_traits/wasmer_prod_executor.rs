@@ -5,7 +5,6 @@ use crate::executor_interface::{
 };
 use std::{
     fmt,
-    rc::Rc,
     sync::{Arc, Mutex},
 };
 
@@ -41,7 +40,7 @@ impl WasmerProdExecutor {
         wasm_bytes: &[u8],
         compilation_options: &CompilationOptions,
     ) -> Box<dyn Instance> {
-        let inner_instance_ref = Rc::new_cyclic(|weak| {
+        let inner_instance_ref = Arc::new_cyclic(|weak| {
             let instance_state = WasmerProdInstanceState::new(weak.clone());
             let vm_hooks = self.runtime_ref.vm_hooks(instance_state);
 

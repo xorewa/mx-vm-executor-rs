@@ -158,8 +158,8 @@ impl Drop for InstanceOperationGuard<'_> {
 // calls keep an instance alive even when another thread destroys the
 // handle. That solves lifetime/UAF, but it also means concurrent callers
 // can reach the same instance. `WasmerInstance` is not generally
-// thread-safe: it contains `RefCell<Option<VMHooksEarlyExit>>` and uses
-// unchecked direct wasm-memory access.
+// thread-safe: it uses unchecked direct wasm-memory access and wraps
+// Wasmer objects whose concurrent execution guarantees remain narrow.
 //
 // The operation gate below serializes all ordinary instance operations
 // while allowing same-thread reentrancy. Same-thread reentrancy is

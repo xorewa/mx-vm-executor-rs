@@ -4,7 +4,7 @@
 // !!!!!!!!!!!!!!!!!!!!!! AUTO-GENERATED FILE !!!!!!!!!!!!!!!!!!!!!!
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-use std::{cell::RefCell, ffi::c_void};
+use std::{ffi::c_void, sync::Mutex};
 
 use crate::{MemLength, MemPtr, VMHooks, VMHooksEarlyExit, VMHooksLegacy};
 
@@ -18,13 +18,13 @@ pub trait VMHooksSetEarlyExit: VMHooks {
 /// Will eventually be removed, once everything gets migrated.
 #[derive(Debug)]
 pub struct VMHooksLegacyAdapter<VH: VMHooksSetEarlyExit> {
-    inner_cell: RefCell<VH>,
+    inner_cell: Mutex<VH>,
 }
 
 impl<VH: VMHooksSetEarlyExit> VMHooksLegacyAdapter<VH> {
     pub fn new(inner: VH) -> Self {
         VMHooksLegacyAdapter {
-            inner_cell: RefCell::new(inner),
+            inner_cell: Mutex::new(inner),
         }
     }
 
@@ -33,7 +33,10 @@ impl<VH: VMHooksSetEarlyExit> VMHooksLegacyAdapter<VH> {
         R: Default,
         F: FnOnce(&mut dyn VMHooks) -> Result<R, VMHooksEarlyExit>,
     {
-        let mut vm_hooks = self.inner_cell.borrow_mut();
+        let mut vm_hooks = self
+            .inner_cell
+            .lock()
+            .expect("VMHooksLegacyAdapter mutex poisoned");
         let result = f(&mut *vm_hooks);
         result.unwrap_or_else(|early_exit| {
             vm_hooks.set_early_exit(early_exit);
