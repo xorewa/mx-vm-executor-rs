@@ -15,6 +15,8 @@ pub mod capi_vm_hook_pointers;
 pub mod capi_vm_hooks;
 mod capi_vm_hooks_thread_safety;
 pub mod handle_registry;
+#[cfg(test)]
+mod reentrancy_and_breakpoints_tests;
 pub mod service_singleton;
 pub mod wasmer_logger;
 
