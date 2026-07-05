@@ -29,10 +29,12 @@ pub struct VMHooksWrapper {
 // implications and is tracked as a separate scope from the
 // production wasmer path's fix.
 //
-// The production `vm-executor-wasmer` crate has been moved to
-// `Arc<dyn VMHooksLegacy + Send + Sync>` with the unsafe assertion
-// removed entirely. This experimental crate retains the assertion
-// pending the Rc -> Arc refactor.
+// The production `vm-executor-wasmer` crate follows the upstream
+// MultiversX model: VM hooks are stored behind `Rc<dyn VMHooksLegacy>`
+// and the Wasmer environment wrapper carries the required unsafe
+// Send/Sync assertion. This experimental crate has the same WasmerEnv
+// requirement, but its broader Rc graph still needs a dedicated audit
+// before changing the ownership model.
 unsafe impl Send for VMHooksWrapper {}
 unsafe impl Sync for VMHooksWrapper {}
 

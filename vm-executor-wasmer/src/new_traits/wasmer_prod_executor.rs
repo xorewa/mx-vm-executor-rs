@@ -5,16 +5,14 @@ use crate::executor_interface::{
 };
 use std::{
     fmt,
+    rc::Rc,
     sync::{Arc, Mutex},
 };
 
 use super::{WasmerProdInstance, WasmerProdInstanceState};
 
 pub trait WasmerProdRuntimeRef: Send + Sync {
-    fn vm_hooks(
-        &self,
-        instance_state: WasmerProdInstanceState,
-    ) -> Box<dyn VMHooksLegacy + Send + Sync>;
+    fn vm_hooks(&self, instance_state: WasmerProdInstanceState) -> Box<dyn VMHooksLegacy>;
 
     fn opcode_cost(&self) -> Arc<Mutex<OpcodeCost>>;
 }
@@ -40,12 +38,12 @@ impl WasmerProdExecutor {
         wasm_bytes: &[u8],
         compilation_options: &CompilationOptions,
     ) -> Box<dyn Instance> {
-        let inner_instance_ref = Arc::new_cyclic(|weak| {
+        let inner_instance_ref = Rc::new_cyclic(|weak| {
             let instance_state = WasmerProdInstanceState::new(weak.clone());
             let vm_hooks = self.runtime_ref.vm_hooks(instance_state);
 
             WasmerInstance::try_new_instance(
-                Arc::from(vm_hooks),
+                Rc::from(vm_hooks),
                 self.runtime_ref.opcode_cost(),
                 wasm_bytes,
                 &compilation_options.to_legacy(),

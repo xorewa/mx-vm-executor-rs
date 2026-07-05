@@ -4,7 +4,7 @@
 // !!!!!!!!!!!!!!!!!!!!!! AUTO-GENERATED FILE !!!!!!!!!!!!!!!!!!!!!!
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-use std::{ffi::c_void, sync::Mutex};
+use std::{cell::RefCell, ffi::c_void};
 
 use crate::{MemLength, MemPtr, VMHooks, VMHooksEarlyExit, VMHooksLegacy};
 
@@ -18,13 +18,13 @@ pub trait VMHooksSetEarlyExit: VMHooks {
 /// Will eventually be removed, once everything gets migrated.
 #[derive(Debug)]
 pub struct VMHooksLegacyAdapter<VH: VMHooksSetEarlyExit> {
-    inner_cell: Mutex<VH>,
+    inner_cell: RefCell<VH>,
 }
 
 impl<VH: VMHooksSetEarlyExit> VMHooksLegacyAdapter<VH> {
     pub fn new(inner: VH) -> Self {
         VMHooksLegacyAdapter {
-            inner_cell: Mutex::new(inner),
+            inner_cell: RefCell::new(inner),
         }
     }
 
@@ -33,10 +33,7 @@ impl<VH: VMHooksSetEarlyExit> VMHooksLegacyAdapter<VH> {
         R: Default,
         F: FnOnce(&mut dyn VMHooks) -> Result<R, VMHooksEarlyExit>,
     {
-        let mut vm_hooks = self
-            .inner_cell
-            .lock()
-            .expect("VMHooksLegacyAdapter mutex poisoned");
+        let mut vm_hooks = self.inner_cell.borrow_mut();
         let result = f(&mut *vm_hooks);
         result.unwrap_or_else(|early_exit| {
             vm_hooks.set_early_exit(early_exit);
@@ -1212,5 +1209,83 @@ impl<VH: VMHooksSetEarlyExit> VMHooksLegacy for VMHooksLegacyAdapter<VH> {
 
     fn managed_pairing_checks_ec(&self, curve_id: i32, points_g1_handle: i32, points_g2_handle: i32) -> i32 {
         self.adapt_vm_hooks(|inner| VMHooks::managed_pairing_checks_ec(inner, curve_id, points_g1_handle, points_g2_handle))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{new_traits::VMHooksDefault, VMHooksEarlyExit, VMHooksLegacy};
+
+    impl VMHooksSetEarlyExit for VMHooksDefault {
+        fn set_early_exit(&self, _early_exit: VMHooksEarlyExit) {}
+    }
+
+    #[test]
+    fn adapt_vm_hooks_allows_repeated_non_reentrant_calls() {
+        let adapter = VMHooksLegacyAdapter::new(VMHooksDefault);
+
+        let first = adapter.adapt_vm_hooks(|_inner| Ok::<i32, VMHooksEarlyExit>(7));
+        let second = adapter.adapt_vm_hooks(|_inner| Ok::<i32, VMHooksEarlyExit>(11));
+
+        assert_eq!(first, 7);
+        assert_eq!(second, 11);
+    }
+
+    #[test]
+    fn early_exit_returns_default_value_and_releases_borrow() {
+        let adapter = VMHooksLegacyAdapter::new(VMHooksDefault);
+
+        let early_exit_result = adapter.adapt_vm_hooks(|_inner| {
+            Err::<i32, VMHooksEarlyExit>(
+                VMHooksEarlyExit::new(42).with_const_message("test early exit"),
+            )
+        });
+        let next_call_result = adapter.adapt_vm_hooks(|_inner| Ok::<i32, VMHooksEarlyExit>(13));
+
+        assert_eq!(early_exit_result, i32::default());
+        assert_eq!(next_call_result, 13);
+    }
+
+    #[test]
+    fn same_thread_reentry_panics_instead_of_deadlocking() {
+        use std::panic;
+        let adapter = VMHooksLegacyAdapter::new(VMHooksDefault);
+
+        let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+            adapter.adapt_vm_hooks(|_inner| {
+                let _ = adapter.adapt_vm_hooks(|_inner2| {
+                    Ok::<(), VMHooksEarlyExit>(())
+                });
+                Ok::<(), VMHooksEarlyExit>(())
+            })
+        }));
+
+        assert!(result.is_err(), "Expected a panic (RefCell) but it completed successfully!");
+    }
+
+    #[test]
+    fn adapter_remains_usable_after_caught_reentry_panic() {
+        use std::panic;
+        let adapter = VMHooksLegacyAdapter::new(VMHooksDefault);
+
+        let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+            adapter.adapt_vm_hooks(|_inner| {
+                adapter.adapt_vm_hooks(|_inner2| Ok::<(), VMHooksEarlyExit>(()));
+                Ok::<(), VMHooksEarlyExit>(())
+            })
+        }));
+
+        assert!(result.is_err());
+        assert_eq!(adapter.get_gas_left(), 0);
+        assert_eq!(adapter.managed_drwa_sync_mirror(7), 0);
+    }
+
+    #[test]
+    fn drwa_legacy_methods_remain_wired_after_refcell_restore() {
+        let adapter = VMHooksLegacyAdapter::new(VMHooksDefault);
+
+        assert_eq!(adapter.managed_drwa_sync_mirror(1), 0);
+        assert_eq!(adapter.managed_drwa_native_governance_query(2, 3, 4), 0);
     }
 }

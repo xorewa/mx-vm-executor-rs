@@ -4,7 +4,7 @@ use crate::executor_interface::{
     VMHooksEarlyExit,
 };
 
-use std::sync::{Arc, Weak};
+use std::rc::{Rc, Weak};
 
 use super::WasmerExecutorError;
 
@@ -18,7 +18,7 @@ impl WasmerProdInstanceState {
         WasmerProdInstanceState { inner_instance_ref }
     }
 
-    fn instance_ref(&self) -> Result<Arc<WasmerInstance>, ExecutorError> {
+    fn instance_ref(&self) -> Result<Rc<WasmerInstance>, ExecutorError> {
         self.inner_instance_ref
             .upgrade()
             .map_or_else(|| Err(WasmerExecutorError::BadInstancePointer.into()), Ok)

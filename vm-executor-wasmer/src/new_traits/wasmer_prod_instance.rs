@@ -4,17 +4,17 @@ use crate::executor_interface::{
 };
 use crate::{WasmerInstance, wasmer_metering::set_points_limit};
 
-use std::sync::Arc;
+use std::rc::Rc;
 
 use super::WasmerExecutorError;
 
 #[derive(Clone)]
 pub struct WasmerProdInstance {
-    inner_instance_ref: Arc<WasmerInstance>,
+    inner_instance_ref: Rc<WasmerInstance>,
 }
 
 impl WasmerProdInstance {
-    pub fn new(inner_instance_ref: Arc<WasmerInstance>) -> Self {
+    pub fn new(inner_instance_ref: Rc<WasmerInstance>) -> Self {
         WasmerProdInstance { inner_instance_ref }
     }
 }
