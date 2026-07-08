@@ -559,6 +559,14 @@ impl<VH: VMHooksSetEarlyExit> VMHooksLegacy for VMHooksLegacyAdapter<VH> {
         self.adapt_vm_hooks(|inner| VMHooks::managed_is_builtin_function(inner, function_name_handle))
     }
 
+    fn managed_drwa_sync_mirror(&self, payload_handle: i32) -> i32 {
+        self.adapt_vm_hooks(|inner| VMHooks::managed_drwa_sync_mirror(inner, payload_handle))
+    }
+
+    fn managed_drwa_native_governance_query(&self, query_type: i32, key_handle: i32, dest_handle: i32) -> i32 {
+        self.adapt_vm_hooks(|inner| VMHooks::managed_drwa_native_governance_query(inner, query_type, key_handle, dest_handle))
+    }
+
     fn big_float_new_from_parts(&self, integral_part: i32, fractional_part: i32, exponent: i32) -> i32 {
         self.adapt_vm_hooks(|inner| VMHooks::big_float_new_from_parts(inner, integral_part, fractional_part, exponent))
     }
@@ -1153,5 +1161,132 @@ impl<VH: VMHooksSetEarlyExit> VMHooksLegacy for VMHooksLegacyAdapter<VH> {
 
     fn managed_verify_blsaggregated_signature(&self, key_handle: i32, message_handle: i32, sig_handle: i32) -> i32 {
         self.adapt_vm_hooks(|inner| VMHooks::managed_verify_blsaggregated_signature(inner, key_handle, message_handle, sig_handle))
+    }
+
+    fn activate_unsafe_mode(&self) {
+        self.adapt_vm_hooks(|inner| VMHooks::activate_unsafe_mode(inner))
+    }
+
+    fn deactivate_unsafe_mode(&self) {
+        self.adapt_vm_hooks(|inner| VMHooks::deactivate_unsafe_mode(inner))
+    }
+
+    fn managed_get_num_errors(&self) -> i32 {
+        self.adapt_vm_hooks(|inner| VMHooks::managed_get_num_errors(inner))
+    }
+
+    fn managed_get_error_with_index(&self, index: i32, error_handle: i32) {
+        self.adapt_vm_hooks(|inner| VMHooks::managed_get_error_with_index(inner, index, error_handle))
+    }
+
+    fn managed_get_last_error(&self, error_handle: i32) {
+        self.adapt_vm_hooks(|inner| VMHooks::managed_get_last_error(inner, error_handle))
+    }
+
+    fn managed_verify_groth16(&self, curve_id: i32, proof_handle: i32, vk_handle: i32, pub_witness_handle: i32) -> i32 {
+        self.adapt_vm_hooks(|inner| VMHooks::managed_verify_groth16(inner, curve_id, proof_handle, vk_handle, pub_witness_handle))
+    }
+
+    fn managed_verify_plonk(&self, curve_id: i32, proof_handle: i32, vk_handle: i32, pub_witness_handle: i32) -> i32 {
+        self.adapt_vm_hooks(|inner| VMHooks::managed_verify_plonk(inner, curve_id, proof_handle, vk_handle, pub_witness_handle))
+    }
+
+    fn managed_add_ec(&self, curve_id: i32, group_id: i32, point1_handle: i32, point2_handle: i32, result_handle: i32) -> i32 {
+        self.adapt_vm_hooks(|inner| VMHooks::managed_add_ec(inner, curve_id, group_id, point1_handle, point2_handle, result_handle))
+    }
+
+    fn managed_mul_ec(&self, curve_id: i32, group_id: i32, point_handle: i32, scalar_handle: i32, result_handle: i32) -> i32 {
+        self.adapt_vm_hooks(|inner| VMHooks::managed_mul_ec(inner, curve_id, group_id, point_handle, scalar_handle, result_handle))
+    }
+
+    fn managed_multi_exp_ec(&self, curve_id: i32, group_id: i32, points_handle: i32, scalars_handle: i32, result_handle: i32) -> i32 {
+        self.adapt_vm_hooks(|inner| VMHooks::managed_multi_exp_ec(inner, curve_id, group_id, points_handle, scalars_handle, result_handle))
+    }
+
+    fn managed_map_to_curve_ec(&self, curve_id: i32, group_id: i32, element_handle: i32, result_handle: i32) -> i32 {
+        self.adapt_vm_hooks(|inner| VMHooks::managed_map_to_curve_ec(inner, curve_id, group_id, element_handle, result_handle))
+    }
+
+    fn managed_pairing_checks_ec(&self, curve_id: i32, points_g1_handle: i32, points_g2_handle: i32) -> i32 {
+        self.adapt_vm_hooks(|inner| VMHooks::managed_pairing_checks_ec(inner, curve_id, points_g1_handle, points_g2_handle))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{VMHooksEarlyExit, VMHooksLegacy, new_traits::VMHooksDefault};
+
+    impl VMHooksSetEarlyExit for VMHooksDefault {
+        fn set_early_exit(&self, _early_exit: VMHooksEarlyExit) {}
+    }
+
+    #[test]
+    fn adapt_vm_hooks_allows_repeated_non_reentrant_calls() {
+        let adapter = VMHooksLegacyAdapter::new(VMHooksDefault);
+
+        let first = adapter.adapt_vm_hooks(|_inner| Ok::<i32, VMHooksEarlyExit>(7));
+        let second = adapter.adapt_vm_hooks(|_inner| Ok::<i32, VMHooksEarlyExit>(11));
+
+        assert_eq!(first, 7);
+        assert_eq!(second, 11);
+    }
+
+    #[test]
+    fn early_exit_returns_default_value_and_releases_borrow() {
+        let adapter = VMHooksLegacyAdapter::new(VMHooksDefault);
+
+        let early_exit_result = adapter.adapt_vm_hooks(|_inner| {
+            Err::<i32, VMHooksEarlyExit>(
+                VMHooksEarlyExit::new(42).with_const_message("test early exit"),
+            )
+        });
+        let next_call_result = adapter.adapt_vm_hooks(|_inner| Ok::<i32, VMHooksEarlyExit>(13));
+
+        assert_eq!(early_exit_result, i32::default());
+        assert_eq!(next_call_result, 13);
+    }
+
+    #[test]
+    fn same_thread_reentry_panics_instead_of_deadlocking() {
+        use std::panic;
+        let adapter = VMHooksLegacyAdapter::new(VMHooksDefault);
+
+        let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+            adapter.adapt_vm_hooks(|_inner| {
+                let _ = adapter.adapt_vm_hooks(|_inner2| Ok::<(), VMHooksEarlyExit>(()));
+                Ok::<(), VMHooksEarlyExit>(())
+            })
+        }));
+
+        assert!(
+            result.is_err(),
+            "Expected a panic (RefCell) but it completed successfully!"
+        );
+    }
+
+    #[test]
+    fn adapter_remains_usable_after_caught_reentry_panic() {
+        use std::panic;
+        let adapter = VMHooksLegacyAdapter::new(VMHooksDefault);
+
+        let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+            adapter.adapt_vm_hooks(|_inner| {
+                adapter.adapt_vm_hooks(|_inner2| Ok::<(), VMHooksEarlyExit>(()));
+                Ok::<(), VMHooksEarlyExit>(())
+            })
+        }));
+
+        assert!(result.is_err());
+        assert_eq!(adapter.get_gas_left(), 0);
+        assert_eq!(adapter.managed_drwa_sync_mirror(7), 0);
+    }
+
+    #[test]
+    fn drwa_legacy_methods_remain_wired_after_refcell_restore() {
+        let adapter = VMHooksLegacyAdapter::new(VMHooksDefault);
+
+        assert_eq!(adapter.managed_drwa_sync_mirror(1), 0);
+        assert_eq!(adapter.managed_drwa_native_governance_query(2, 3, 4), 0);
     }
 }
