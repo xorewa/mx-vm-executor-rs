@@ -3,8 +3,10 @@ name: Builds and tests
 on:
   push:
     branches:
-      - master
+      - NewArc
   pull_request:
+    branches:
+      - NewArc
 
 jobs:
   rust_test:

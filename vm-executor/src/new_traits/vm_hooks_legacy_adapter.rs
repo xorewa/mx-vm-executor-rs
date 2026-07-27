@@ -1254,7 +1254,7 @@ mod tests {
 
         let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
             adapter.adapt_vm_hooks(|_inner| {
-                let _ = adapter.adapt_vm_hooks(|_inner2| Ok::<(), VMHooksEarlyExit>(()));
+                adapter.adapt_vm_hooks(|_inner2| Ok::<(), VMHooksEarlyExit>(()));
                 Ok::<(), VMHooksEarlyExit>(())
             })
         }));
